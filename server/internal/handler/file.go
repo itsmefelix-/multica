@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/issueview"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
@@ -33,20 +34,7 @@ const maxUploadSize = 100 << 20 // 100 MB
 // Response types
 // ---------------------------------------------------------------------------
 
-type AttachmentResponse struct {
-	ID           string  `json:"id"`
-	WorkspaceID  string  `json:"workspace_id"`
-	IssueID      *string `json:"issue_id"`
-	CommentID    *string `json:"comment_id"`
-	UploaderType string  `json:"uploader_type"`
-	UploaderID   string  `json:"uploader_id"`
-	Filename     string  `json:"filename"`
-	URL          string  `json:"url"`
-	DownloadURL  string  `json:"download_url"`
-	ContentType  string  `json:"content_type"`
-	SizeBytes    int64   `json:"size_bytes"`
-	CreatedAt    string  `json:"created_at"`
-}
+type AttachmentResponse = issueview.AttachmentResponse
 
 func (h *Handler) attachmentToResponse(a db.Attachment) AttachmentResponse {
 	resp := AttachmentResponse{

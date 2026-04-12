@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/internal/issueview"
 	"github.com/multica-ai/multica/server/internal/mention"
 	"github.com/multica-ai/multica/server/internal/realtime"
 	"github.com/multica-ai/multica/server/internal/util"
@@ -540,14 +540,31 @@ func (s *TaskService) broadcastChatDone(ctx context.Context, task db.AgentTaskQu
 	})
 }
 
-func (s *TaskService) broadcastIssueUpdated(issue db.Issue) {
+func (s *TaskService) broadcastIssueUpdated(issue db.Issue, prevIssue db.Issue) {
 	prefix := s.getIssuePrefix(issue.WorkspaceID)
 	s.Bus.Publish(events.Event{
 		Type:        protocol.EventIssueUpdated,
 		WorkspaceID: util.UUIDToString(issue.WorkspaceID),
 		ActorType:   "system",
 		ActorID:     "",
-		Payload:     map[string]any{"issue": issueToMap(issue, prefix)},
+		Payload: map[string]any{
+			"issue":               issueview.IssueToResponse(issue, prefix),
+			"assignee_changed":    false,
+			"status_changed":      true,
+			"priority_changed":    false,
+			"due_date_changed":    false,
+			"description_changed": false,
+			"title_changed":       false,
+			"prev_title":          prevIssue.Title,
+			"prev_assignee_type":  util.TextToPtr(prevIssue.AssigneeType),
+			"prev_assignee_id":    util.UUIDToPtr(prevIssue.AssigneeID),
+			"prev_status":         prevIssue.Status,
+			"prev_priority":       prevIssue.Priority,
+			"prev_due_date":       util.TimestampToPtr(prevIssue.DueDate),
+			"prev_description":    util.TextToPtr(prevIssue.Description),
+			"creator_type":        prevIssue.CreatorType,
+			"creator_id":          util.UUIDToString(prevIssue.CreatorID),
+		},
 	})
 }
 
@@ -607,7 +624,7 @@ func (s *TaskService) writeCompletion(ctx context.Context, task db.AgentTaskQueu
 		} else if err != nil {
 			errs = append(errs, fmt.Errorf("update issue status: %w", err))
 		} else {
-			s.broadcastIssueUpdated(updated)
+			s.broadcastIssueUpdated(updated, issue)
 		}
 	}
 
@@ -770,28 +787,6 @@ func (s *TaskService) createAgentComment(ctx context.Context, issueID, agentID p
 		},
 	})
 	return comment, nil
-}
-
-func issueToMap(issue db.Issue, issuePrefix string) map[string]any {
-	return map[string]any{
-		"id":              util.UUIDToString(issue.ID),
-		"workspace_id":    util.UUIDToString(issue.WorkspaceID),
-		"number":          issue.Number,
-		"identifier":      issuePrefix + "-" + strconv.Itoa(int(issue.Number)),
-		"title":           issue.Title,
-		"description":     util.TextToPtr(issue.Description),
-		"status":          issue.Status,
-		"priority":        issue.Priority,
-		"assignee_type":   util.TextToPtr(issue.AssigneeType),
-		"assignee_id":     util.UUIDToPtr(issue.AssigneeID),
-		"creator_type":    issue.CreatorType,
-		"creator_id":      util.UUIDToString(issue.CreatorID),
-		"parent_issue_id": util.UUIDToPtr(issue.ParentIssueID),
-		"position":        issue.Position,
-		"due_date":        util.TimestampToPtr(issue.DueDate),
-		"created_at":      util.TimestampToString(issue.CreatedAt),
-		"updated_at":      util.TimestampToString(issue.UpdatedAt),
-	}
 }
 
 // agentToMap builds a simple map for broadcasting agent status updates.
