@@ -6,19 +6,13 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/multica-ai/multica/server/internal/issueview"
 	"github.com/multica-ai/multica/server/internal/logger"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
-type IssueReactionResponse struct {
-	ID        string `json:"id"`
-	IssueID   string `json:"issue_id"`
-	ActorType string `json:"actor_type"`
-	ActorID   string `json:"actor_id"`
-	Emoji     string `json:"emoji"`
-	CreatedAt string `json:"created_at"`
-}
+type IssueReactionResponse = issueview.IssueReactionResponse
 
 func issueReactionToResponse(r db.IssueReaction) IssueReactionResponse {
 	return IssueReactionResponse{

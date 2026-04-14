@@ -13,8 +13,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/middleware"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 // newDaemonTokenRequest creates an HTTP request with daemon token context set
@@ -215,6 +217,57 @@ func TestDaemonCompletionWriteback_ImplementationMovesToReview(t *testing.T) {
 		if !strings.Contains(comments[0], want) {
 			t.Fatalf("completion comment missing %q:\n%s", want, comments[0])
 		}
+	}
+}
+
+func TestDaemonCompletionWriteback_StatusEventIncludesListenerMetadata(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("database not available")
+	}
+
+	bus := events.New()
+	oldBus := testHandler.TaskService.Bus
+	testHandler.TaskService.Bus = bus
+	t.Cleanup(func() {
+		testHandler.TaskService.Bus = oldBus
+	})
+
+	var event events.Event
+	bus.Subscribe(protocol.EventIssueUpdated, func(e events.Event) {
+		event = e
+	})
+
+	issueID, taskID := createCompletionTask(t, "Fix daemon writeback metadata", "todo")
+	completeDaemonTask(t, taskID, map[string]any{
+		"output": "Implemented daemon writeback metadata.",
+	})
+
+	if event.Type != protocol.EventIssueUpdated {
+		t.Fatalf("event type = %q, want %q", event.Type, protocol.EventIssueUpdated)
+	}
+	if event.WorkspaceID != testWorkspaceID {
+		t.Fatalf("event workspace_id = %q, want %q", event.WorkspaceID, testWorkspaceID)
+	}
+
+	payload, ok := event.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("event payload type = %T, want map[string]any", event.Payload)
+	}
+	issue, ok := payload["issue"].(IssueResponse)
+	if !ok {
+		t.Fatalf("payload issue type = %T, want handler.IssueResponse", payload["issue"])
+	}
+	if issue.ID != issueID {
+		t.Fatalf("event issue id = %q, want %q", issue.ID, issueID)
+	}
+	if issue.Status != "in_review" {
+		t.Fatalf("event issue status = %q, want in_review", issue.Status)
+	}
+	if statusChanged, _ := payload["status_changed"].(bool); !statusChanged {
+		t.Fatalf("status_changed = %v, want true", payload["status_changed"])
+	}
+	if prevStatus, _ := payload["prev_status"].(string); prevStatus != "todo" {
+		t.Fatalf("prev_status = %q, want todo", prevStatus)
 	}
 }
 
